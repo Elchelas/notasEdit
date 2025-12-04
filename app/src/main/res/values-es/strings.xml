@@ -1,0 +1,36 @@
+<resources>
+    <string name="app_name">Notas &amp; Tareas</string>
+
+    <string name="menu_home">Inicio</string>
+    <string name="menu_new">Nueva</string>
+    <string name="menu_settings">Ajustes</string>
+
+    <string name="title_home">Notas &amp; Tareas</string>
+    <string name="search_placeholder">Buscar…</string>
+    <string name="tab_all">Todos</string>
+    <string name="tab_tasks">Tareas</string>
+    <string name="tab_notes">Notas</string>
+
+    <string name="title_edit">Editar</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_save">Guardar</string>
+    <string name="field_title">Título</string>
+    <string name="field_description">Descripción</string>
+    <string name="field_type">Tipo</string>
+    <string name="type_task">Tarea</string>
+    <string name="type_note">Nota</string>
+    <string name="pick_date">Elegir fecha</string>
+    <string name="pick_time">Elegir hora</string>
+    <string name="field_completed">Completada</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Cancelar</string>
+
+    <string name="title_detail">Detalle</string>
+    <string name="action_edit">Editar</string>
+    <string name="action_delete">Eliminar</string>
+
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_section_prefs">Preferencias</string>
+    <string name="settings_dark">Tema oscuro (placeholder)</string>
+    <string name="settings_lang">Idioma español (placeholder)</string>
+</resources>
