@@ -152,12 +152,14 @@ class NoteEditViewModel(
             // 4. Guardar (Ahora es seguro porque estamos en IO)
             repo.upsertGraph(note = entity, attachments = s.attachments, reminders = reminders)
 
+            val savedData = repo.byId(id).firstOrNull()
+            val realReminders = savedData?.reminders ?: emptyList()
+
             // 5. Programar Alarmas
-            if (reminders.isNotEmpty()) {
+            if (realReminders.isNotEmpty()) {
                 try {
-                    // AlarmManager es rápido, pero mejor prevenir
                     val scheduler = AlarmScheduler(Graph.appContext)
-                    scheduler.schedule(reminders.first(), entity.title)
+                    scheduler.schedule(realReminders.first(), entity.title)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
