@@ -83,4 +83,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
 
+    // Koin for Android
+    implementation("io.insert-koin:koin-android:3.5.6")
+    // Koin for Jetpack Compose
+    implementation("io.insert-koin:koin-androidx-compose:3.5.6")
 }

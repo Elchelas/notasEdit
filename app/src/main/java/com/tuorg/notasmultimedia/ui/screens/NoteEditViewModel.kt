@@ -1,26 +1,34 @@
 package com.tuorg.notasmultimedia.ui.screens
 
+import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.tuorg.notasmultimedia.BuildConfig
 import com.tuorg.notasmultimedia.di.Graph
 import com.tuorg.notasmultimedia.model.db.AttachmentEntity
 import com.tuorg.notasmultimedia.model.db.AttachmentType
 import com.tuorg.notasmultimedia.model.db.ItemType
 import com.tuorg.notasmultimedia.model.db.NoteEntity
+import com.tuorg.notasmultimedia.model.db.ReminderEntity
+import com.tuorg.notasmultimedia.ui.common.AlarmScheduler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.LocalDateTime
 import java.util.UUID
-import android.content.Intent
-import com.tuorg.notasmultimedia.model.db.ReminderEntity
-import com.tuorg.notasmultimedia.ui.common.AlarmScheduler
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import android.provider.OpenableColumns
+
+enum class CaptureMediaAction {
+    PHOTO, VIDEO
+}
+
 data class EditUiState(
     val id: String,
     val isNewNote: Boolean = true,
@@ -33,17 +41,20 @@ data class EditUiState(
     val completed: Boolean = false,
     val attachments: List<AttachmentEntity> = emptyList(),
     val showMediaPicker: Boolean = false,
-    val recurringInterval: Long = 0
+    val recurringInterval: Long = 0,
+    // New state for camera actions
+    val captureMediaAction: CaptureMediaAction? = null,
+    val tempFileUri: Uri? = null
 )
 
 class NoteEditViewModel(
-    noteId: String?, // ID que llega desde la navegación, puede ser null
+    noteId: String?,
 ) : ViewModel() {
 
     private val repo = Graph.notes
     private val contentResolver = Graph.contentResolver
 
-    // ID estable para la sesión de edición. O el que llega, o uno nuevo.
+
     private val stableNoteId = noteId ?: UUID.randomUUID().toString()
 
     private val _state = MutableStateFlow(EditUiState(id = stableNoteId, isNewNote = noteId == null))
@@ -82,12 +93,65 @@ class NoteEditViewModel(
 
     fun showMediaPicker(show: Boolean) { _state.value = _state.value.copy(showMediaPicker = show) }
 
+    // --- Start of New/Modified Media Logic ---
+
+    fun prepareToCaptureMedia(action: CaptureMediaAction) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = Graph.appContext
+            val extension = when (action) {
+                CaptureMediaAction.PHOTO -> ".jpg"
+                CaptureMediaAction.VIDEO -> ".mp4"
+            }
+            // Create a file in the external cache directory
+            val file = File.createTempFile("capture_", extension, context.externalCacheDir)
+            // Get a content URI for the file using our FileProvider
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${BuildConfig.APPLICATION_ID}.provider", // Authority must match AndroidManifest
+                file
+            )
+
+            // Update the state on the main thread to trigger the UI
+            withContext(Dispatchers.Main) {
+                _state.value = _state.value.copy(
+                    captureMediaAction = action,
+                    tempFileUri = uri
+                )
+            }
+        }
+    }
+
+    fun onMediaCaptured(success: Boolean) {
+        val capturedUri = _state.value.tempFileUri
+        val action = _state.value.captureMediaAction
+
+        // Reset state immediately to prevent re-triggering the camera on config change
+        _state.value = _state.value.copy(
+            captureMediaAction = null,
+            tempFileUri = null
+        )
+
+        if (success && capturedUri != null) {
+            val mimeType = when (action) {
+                CaptureMediaAction.PHOTO -> "image/jpeg"
+                CaptureMediaAction.VIDEO -> "video/mp4"
+                else -> null
+            }
+            // Now that the file is captured, treat it like any other selected media
+            onMediaSelected(capturedUri, mimeType)
+        }
+    }
+
     fun onMediaSelected(uri: Uri, mimeType: String?) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Esto es una operación de disco/base de datos, debe ir en IO
-                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } catch (e: Exception) {
+                // Only take persistable permission for URIs from external providers (e.g., Gallery).
+                // URIs from our own FileProvider don't need this and will cause a crash if we try.
+                if (uri.scheme == "content" && uri.authority != "${BuildConfig.APPLICATION_ID}.provider") {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            } catch (e: SecurityException) {
+                // Log the error, the user might have picked a file from a strange provider
                 e.printStackTrace()
             }
 
@@ -118,6 +182,10 @@ class NoteEditViewModel(
             }
         }
     }
+
+    // --- End of New/Modified Media Logic ---
+
+
     private fun getFileNameFromUri(resolver: android.content.ContentResolver, uri: Uri): String? {
         var name: String? = null
         val cursor = resolver.query(uri, null, null, null, null)
@@ -133,7 +201,7 @@ class NoteEditViewModel(
     }
 
     fun save(onSaved: () -> Unit) {
-        // CAMBIO IMPORTANTE: Usar Dispatchers.IO para todo el proceso de guardado
+
         viewModelScope.launch(Dispatchers.IO) {
             val s = _state.value
             val now = LocalDateTime.now()

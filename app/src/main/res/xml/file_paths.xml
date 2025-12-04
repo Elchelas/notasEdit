@@ -1,0 +1,6 @@
+<paths>
+    <external-path
+        name="my_images"
+        path="Android/data/com.tuorg.notasmultimedia/files/Pictures" />
+    <external-cache-path name="my_cache" path="." />
+</paths>

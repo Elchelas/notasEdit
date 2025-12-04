@@ -10,7 +10,10 @@ import com.tuorg.notasmultimedia.ui.screens.DetailScreen
 import com.tuorg.notasmultimedia.ui.screens.EditScreen
 import com.tuorg.notasmultimedia.ui.screens.HomeScreen
 import com.tuorg.notasmultimedia.ui.screens.MediaViewerScreen
+import com.tuorg.notasmultimedia.ui.screens.NoteEditViewModel
 import com.tuorg.notasmultimedia.ui.screens.SettingsScreen
+import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
@@ -44,7 +47,8 @@ fun AppNavHost(navController: NavHostController) {
 
         // Nueva nota/tarea
         composable(Routes.EDIT) {
-            EditScreen(nav = navController, noteId = null)
+            val viewModel: NoteEditViewModel = koinViewModel(parameters = { parametersOf(null as String?) })
+            EditScreen(navController = navController, viewModel = viewModel)
         }
 
         // Editar existente
@@ -53,7 +57,8 @@ fun AppNavHost(navController: NavHostController) {
             arguments = listOf(navArgument("id") { type = NavType.StringType })
         ) { backStack ->
             val id = backStack.arguments?.getString("id")
-            EditScreen(nav = navController, noteId = id)
+            val viewModel: NoteEditViewModel = koinViewModel(parameters = { parametersOf(id) })
+            EditScreen(navController = navController, viewModel = viewModel)
         }
 
         // Detalle

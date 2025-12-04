@@ -29,6 +29,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.core.util.Consumer
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -45,13 +46,15 @@ import com.tuorg.notasmultimedia.ui.screens.SettingsScreen
 import com.tuorg.notasmultimedia.ui.screens.TabletDetailPlaceholder
 import com.tuorg.notasmultimedia.ui.tablet.TabletHome
 import com.tuorg.notasmultimedia.ui.theme.AppTheme
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
+import com.tuorg.notasmultimedia.ui.screens.MediaViewerScreen
+import com.tuorg.notasmultimedia.ui.screens.NoteEditViewModel
+import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import com.tuorg.notasmultimedia.ui.screens.MediaViewerScreen
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -216,8 +219,11 @@ fun App() {
 
                             NavHost(navController = dialogNav, startDestination = "edit") {
                                 composable("edit") {
-                                    // 4. Pasamos el editingId correcto al EditScreen
-                                    EditScreen(nav = dialogNav, noteId = editingId)
+                                    // El ViewModel se obtiene con Koin, pasándole el ID
+                                    // de la nota a editar. Si el ID es null, Koin creará
+                                    // un ViewModel para una nota nueva.
+                                    val viewModel: NoteEditViewModel = koinViewModel(parameters = { parametersOf(editingId) })
+                                    EditScreen(navController = dialogNav, viewModel = viewModel)
                                 }
                                 composable("done") {
                                 }

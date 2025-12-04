@@ -4,19 +4,27 @@ package com.tuorg.notasmultimedia.ui.screens
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
-import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,117 +32,114 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.tuorg.notasmultimedia.BuildConfig
 import com.tuorg.notasmultimedia.model.db.AttachmentEntity
+import com.tuorg.notasmultimedia.model.db.AttachmentType
 import com.tuorg.notasmultimedia.model.db.ItemType
 import com.tuorg.notasmultimedia.nav.Routes
-import java.io.File
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
-import java.util.Objects
-import androidx.compose.material.icons.filled.AudioFile
-import androidx.compose.material.icons.filled.InsertDriveFile
-import com.tuorg.notasmultimedia.model.db.AttachmentType
+
 @Composable
 fun EditScreen(
-    nav: NavController,
+    navController: NavController,
     noteId: String? = null,
-    vm: NoteEditViewModel = viewModel(factory = NoteEditViewModel.provideFactory(noteId))
+    viewModel: NoteEditViewModel = viewModel(factory = NoteEditViewModel.provideFactory(noteId))
 ) {
-    val ui by vm.state.collectAsState()
+    val ui by viewModel.state.collectAsState()
     val ctx = LocalContext.current
-    var tempUri by remember { mutableStateOf<Uri?>(null) }
 
-    // --- LÓGICA DE NAVEGACIÓN INTELIGENTE ---
-    // Detecta si estamos en Móvil (pila normal) o Tablet (Dialog root)
-    val goBack: () -> Unit = {
-        if (nav.previousBackStackEntry != null) {
-            nav.popBackStack()
-        } else {
-            // Si no hay atrás, estamos en el Dialog -> vamos a "done" para cerrar
-            nav.navigate("done") {
-                popUpTo(0) { inclusive = true }
-            }
-        }
-    }
+    // --- Screen is now "dumb" and only reacts to ViewModel state ---
 
-    // --- Funciones y Launchers para Multimedia ---
+    // Launcher for taking a picture
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture(),
+        onResult = { success -> viewModel.onMediaCaptured(success) }
+    )
 
-    fun getUriForFile(context: Context, extension: String): Uri {
-        val file = File.createTempFile("temp_media_${System.currentTimeMillis()}", extension, context.externalCacheDir)
-        return FileProvider.getUriForFile(Objects.requireNonNull(context), BuildConfig.APPLICATION_ID + ".provider", file)
-    }
-
-    val takePhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        if (success) { tempUri?.let { vm.onMediaSelected(it, "image/jpeg") } }
-    }
-
-    val recordVideoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { success ->
-        if (success) { tempUri?.let { vm.onMediaSelected(it, "video/mp4") } }
-    }
+    // Launcher for recording a video
+    val recordVideoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CaptureVideo(),
+        onResult = { success -> viewModel.onMediaCaptured(success) }
+    )
 
     val pickVisualMediaLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             val mimeType = ctx.contentResolver.getType(uri) ?: "image/jpeg"
-            vm.onMediaSelected(uri, mimeType)
+            viewModel.onMediaSelected(uri, mimeType)
         }
     }
     val pickFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             val mime = ctx.contentResolver.getType(uri) ?: "application/octet-stream"
-            vm.onMediaSelected(uri, mime)
+            viewModel.onMediaSelected(uri, mime)
         }
     }
 
     val pickAudioLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) vm.onMediaSelected(uri, "audio/mpeg") // El VM detectará el mime real o usará este como pista
+        if (uri != null) viewModel.onMediaSelected(uri, "audio/mpeg")
     }
 
-    // --- Diálogos ---
+    // This effect listens for changes in the ViewModel state to launch the camera
+    LaunchedEffect(ui.captureMediaAction, ui.tempFileUri) {
+        val action = ui.captureMediaAction
+        val tempFileUri = ui.tempFileUri
+
+        if (action != null && tempFileUri != null) {
+            when (action) {
+                CaptureMediaAction.PHOTO -> takePictureLauncher.launch(tempFileUri)
+                CaptureMediaAction.VIDEO -> recordVideoLauncher.launch(tempFileUri)
+            }
+        }
+    }
+
+    // --- Dialogs ---
 
     if (ui.showMediaPicker) {
-        Dialog(onDismissRequest = { vm.showMediaPicker(false) }) {
+        Dialog(onDismissRequest = { viewModel.showMediaPicker(false) }) {
             Surface(shape = MaterialTheme.shapes.large, tonalElevation = 8.dp) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Añadir multimedia", style = MaterialTheme.typography.titleLarge)
+                    // Buttons now just notify the ViewModel of the user's intent
                     TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        vm.showMediaPicker(false)
-                        val uri = getUriForFile(ctx, ".jpg")
-                        tempUri = uri
-                        takePhotoLauncher.launch(uri)
+                        viewModel.showMediaPicker(false)
+                        viewModel.prepareToCaptureMedia(CaptureMediaAction.PHOTO)
                     }) { Text("Tomar foto") }
                     TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        vm.showMediaPicker(false)
-                        val uri = getUriForFile(ctx, ".mp4")
-                        tempUri = uri
-                        recordVideoLauncher.launch(uri)
+                        viewModel.showMediaPicker(false)
+                        viewModel.prepareToCaptureMedia(CaptureMediaAction.VIDEO)
                     }) { Text("Grabar video") }
                     TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        vm.showMediaPicker(false)
+                        viewModel.showMediaPicker(false)
                         pickVisualMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
                     }) { Text("Elegir de la galería") }
                     TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        vm.showMediaPicker(false)
-                        pickAudioLauncher.launch("audio/*") // Filtra solo audios
+                        viewModel.showMediaPicker(false)
+                        pickAudioLauncher.launch("audio/*")
                     }) { Text("Audio") }
 
                     TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        vm.showMediaPicker(false)
-                        // application/* incluye pdf, doc, json, etc.
+                        viewModel.showMediaPicker(false)
                         pickFileLauncher.launch(arrayOf("application/*", "text/*"))
                     }) { Text("Archivo (PDF, Doc...)") }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { vm.showMediaPicker(false) }) { Text("Cancelar") }
+                        TextButton(onClick = { viewModel.showMediaPicker(false) }) { Text("Cancelar") }
                     }
                 }
             }
+        }
+    }
+
+    val goBack: () -> Unit = {
+        if (navController.previousBackStackEntry != null) {
+            navController.popBackStack()
+        } else {
+            navController.navigate("done") { popUpTo(0) { inclusive = true } }
         }
     }
 
@@ -145,45 +150,40 @@ fun EditScreen(
         DatePickerDialog(ctx, { _, y, m, d ->
             val date = LocalDate.of(y, m + 1, d)
             val time = ui.dueAt?.toLocalTime() ?: LocalTime.of(9, 0)
-            vm.setDue(LocalDateTime.of(date, time))
+            viewModel.setDue(LocalDateTime.of(date, time))
         }, dueDate.year, dueDate.monthValue - 1, dueDate.dayOfMonth).show()
     }
 
     fun pickTime() {
         TimePickerDialog(ctx, { _, h, min ->
             val date = ui.dueAt?.toLocalDate() ?: LocalDate.now()
-            vm.setDue(LocalDateTime.of(date, LocalTime.of(h, min)))
+            viewModel.setDue(LocalDateTime.of(date, LocalTime.of(h, min)))
         }, dueTime.hour, dueTime.minute, true).show()
     }
 
-    // --- UI Principal ---
+    // --- Main UI ---
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(if (ui.isNewNote) "Nueva nota" else "Editar nota") },
-                // USAMOS goBack() aquí
-                navigationIcon = { TextButton(onClick = { goBack() }) { Text("Cancelar") } },
-                // USAMOS goBack() en el callback de save
-                actions = { TextButton(enabled = ui.title.isNotBlank(), onClick = { vm.save { goBack() } }) { Text("Guardar") } }
+                navigationIcon = { TextButton(onClick = goBack) { Text("Cancelar") } },
+                actions = { TextButton(enabled = ui.title.isNotBlank(), onClick = { viewModel.save { goBack() } }) { Text("Guardar") } }
             )
         }
     ) { pads ->
         Column(
             Modifier
                 .padding(pads)
-                .padding(16.dp)
-            // Hacemos scrollable si el contenido es largo (especialmente en horizontal)
-            // .verticalScroll(rememberScrollState())
-            ,
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            OutlinedTextField(value = ui.title, onValueChange = vm::setTitle, label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = ui.description, onValueChange = vm::setDescription, label = { Text("Descripción") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = ui.title, onValueChange = viewModel::setTitle, label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = ui.description, onValueChange = viewModel::setDescription, label = { Text("Descripción") }, minLines = 3, modifier = Modifier.fillMaxWidth())
 
             Text("Tipo", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                FilterChip(selected = ui.type == ItemType.TASK, onClick = { vm.setType(ItemType.TASK) }, label = { Text("Tarea") })
-                FilterChip(selected = ui.type == ItemType.NOTE, onClick = { vm.setType(ItemType.NOTE) }, label = { Text("Nota") })
+                FilterChip(selected = ui.type == ItemType.TASK, onClick = { viewModel.setType(ItemType.TASK) }, label = { Text("Tarea") })
+                FilterChip(selected = ui.type == ItemType.NOTE, onClick = { viewModel.setType(ItemType.NOTE) }, label = { Text("Nota") })
             }
 
             if (ui.type == ItemType.TASK) {
@@ -194,37 +194,25 @@ fun EditScreen(
                 Text("Repetir recordatorio:", style = MaterialTheme.typography.titleSmall)
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = ui.recurringInterval == 0L,
-                        onClick = { vm.setRecurring(0) },
-                        label = { Text("Nunca") }
-                    )
-                    FilterChip(
-                        selected = ui.recurringInterval == 5L,
-                        onClick = { vm.setRecurring(5) },
-                        label = { Text("5 min") }
-                    )
-                    FilterChip(
-                        selected = ui.recurringInterval == 60L,
-                        onClick = { vm.setRecurring(60) },
-                        label = { Text("1 hora") }
-                    )
+                    FilterChip(selected = ui.recurringInterval == 0L, onClick = { viewModel.setRecurring(0) }, label = { Text("Nunca") })
+                    FilterChip(selected = ui.recurringInterval == 5L, onClick = { viewModel.setRecurring(5) }, label = { Text("5 min") })
+                    FilterChip(selected = ui.recurringInterval == 60L, onClick = { viewModel.setRecurring(60) }, label = { Text("1 hora") })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = ui.completed, onCheckedChange = vm::setCompleted)
+                    Checkbox(checked = ui.completed, onCheckedChange = viewModel::setCompleted)
                     Text("Marcar como completada")
                 }
             }
 
             Text("Adjuntos", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ElevatedButton(onClick = { vm.showMediaPicker(true) }) { Text("+ Multimedia/archivos") }
+                ElevatedButton(onClick = { viewModel.showMediaPicker(true) }) { Text("+ Multimedia/archivos") }
             }
 
             Attachments(
                 attachments = ui.attachments,
-                onRemove = vm::onAttachmentRemoved,
-                nav = nav
+                onRemove = viewModel::onAttachmentRemoved,
+                navController = navController
             )
         }
     }
@@ -234,7 +222,7 @@ fun EditScreen(
 private fun Attachments(
     attachments: List<AttachmentEntity>,
     onRemove: (AttachmentEntity) -> Unit,
-    nav: NavController,
+    navController: NavController,
     modifier: Modifier = Modifier
 ) {
     if (attachments.isEmpty()) {
@@ -248,25 +236,24 @@ private fun Attachments(
         LazyRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(attachments) { attachment ->
                 Box(contentAlignment = Alignment.TopEnd) {
+                    val encodedUri = URLEncoder.encode(attachment.uri, StandardCharsets.UTF_8.toString())
+                    val clickableModifier = Modifier.clickable { navController.navigate(Routes.MEDIA_VIEWER.replace("{mediaUri}", encodedUri)) }
 
-                    // --- LÓGICA VISUAL MEJORADA ---
                     if (attachment.type == AttachmentType.IMAGE || attachment.type == AttachmentType.VIDEO) {
-                        // Muestra miniatura (lo que ya tenías)
                         AsyncImage(
                             model = attachment.uri,
                             contentDescription = null,
                             modifier = Modifier
                                 .size(96.dp)
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { /* Navegar al visor */ }
+                                .then(clickableModifier)
                         )
                     } else {
-                        // Muestra ICONO para Audio/Archivo
                         Column(
                             modifier = Modifier
                                 .size(96.dp)
                                 .background(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.shapes.small)
-                                .clickable { /* Navegar al visor */ },
+                                .then(clickableModifier),
                             verticalArrangement = Arrangement.Center,
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
@@ -275,7 +262,6 @@ private fun Attachments(
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSecondaryContainer
                             )
-                            // Muestra el nombre del archivo si existe
                             if (!attachment.description.isNullOrBlank()) {
                                 Text(
                                     text = attachment.description,
