@@ -49,6 +49,9 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+import com.tuorg.notasmultimedia.ui.screens.MediaViewerScreen
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -130,6 +133,7 @@ fun App() {
         var showSettings by rememberSaveable { mutableStateOf(false) }
         var showEditor by rememberSaveable { mutableStateOf(false) }
         var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+        var viewingMediaUri by rememberSaveable { mutableStateOf<String?>(null) }
 
         TabletHome(
             drawerContent = {
@@ -171,12 +175,13 @@ fun App() {
                     selectedId != null -> DetailScreenStandalone(
                         id = selectedId!!,
                         onEdit = {
-                            // 3. LÓGICA BOTÓN EDITAR
                             editingId = selectedId
                             showEditor = true
                         },
-                        onDelete = {
-                            selectedId = null
+                        onDelete = { selectedId = null },
+                        // 2. CONECTAMOS EL CALLBACK
+                        onViewAttachment = { uri ->
+                            viewingMediaUri = uri // Guardamos la URI para abrir el visor
                         }
                     )
                     else -> TabletDetailPlaceholder()
@@ -227,6 +232,21 @@ fun App() {
                         }
                     }
                 }
+            }
+        }
+        if (viewingMediaUri != null) {
+            Dialog(
+                onDismissRequest = { viewingMediaUri = null },
+                properties = DialogProperties(usePlatformDefaultWidth = false) // Pantalla completa
+            ) {
+                // Truco: Codificamos la URI porque MediaViewerScreen espera recibirla codificada
+                // (ya que fue diseñado para leer argumentos de navegación web/route)
+                val encoded = URLEncoder.encode(viewingMediaUri, StandardCharsets.UTF_8.toString())
+
+                MediaViewerScreen(
+                    uri = encoded,
+                    onBackPressed = { viewingMediaUri = null }
+                )
             }
         }
     }
