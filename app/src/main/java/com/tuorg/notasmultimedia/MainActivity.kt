@@ -85,7 +85,7 @@ fun App() {
                 }
             }
         }
-
+        // aqui es donde se debide el flujo en nuestros dispositivos diferentes
         // --- FLUJO MÓVIL ---
         if (!isTablet) {
             val nav = rememberNavController()
