@@ -237,7 +237,7 @@ private fun Attachments(
             items(attachments) { attachment ->
                 Box(contentAlignment = Alignment.TopEnd) {
                     val encodedUri = URLEncoder.encode(attachment.uri, StandardCharsets.UTF_8.toString())
-                    val clickableModifier = Modifier.clickable { navController.navigate(Routes.MEDIA_VIEWER.replace("{mediaUri}", encodedUri)) }
+                    val clickableModifier = Modifier.clickable { navController.navigate("${Routes.MEDIA_VIEWER}/$encodedUri") }
 
                     if (attachment.type == AttachmentType.IMAGE || attachment.type == AttachmentType.VIDEO) {
                         AsyncImage(

@@ -1,6 +1,9 @@
 package com.tuorg.notasmultimedia
 
 import android.app.Application
+import coil.Coil
+import coil.ImageLoader
+import coil.decode.VideoFrameDecoder
 import com.tuorg.notasmultimedia.di.Graph
 import com.tuorg.notasmultimedia.di.appModule
 import org.koin.android.ext.koin.androidContext
@@ -10,11 +13,21 @@ import org.koin.core.context.startKoin
 class NotasApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        // Primero, inicializamos tu Grafo para que la base de datos y el repositorio existan.
+
+        // 1. Inicializar Graph (tu base de datos y repo)
         Graph.init(this)
 
-        // Después, y solo después, iniciamos Koin.
-        // Koin ahora podrá usar el repositorio que Graph ya ha creado.
+        // 2. Crear el ImageLoader de Coil con soporte para video
+        val imageLoader = ImageLoader.Builder(this)
+            .components {
+                add(VideoFrameDecoder.Factory())
+            }
+            .build()
+
+        // 3. Establecer el ImageLoader para toda la app
+        Coil.setImageLoader(imageLoader)
+
+        // 4. Inicializar Koin (después de Graph)
         startKoin {
             androidLogger()
             androidContext(this@NotasApp)
