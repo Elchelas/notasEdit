@@ -37,7 +37,7 @@ data class AttachmentEntity(
     val noteId: String,
     val type: AttachmentType,
     val uri: String,                 // preparado para miniaturas
-    val description: String? = null
+    val description: String? = null,
 )
 
 @Entity(

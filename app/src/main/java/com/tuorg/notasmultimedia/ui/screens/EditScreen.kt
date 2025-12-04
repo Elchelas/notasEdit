@@ -39,7 +39,9 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.util.Objects
-
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.InsertDriveFile
+import com.tuorg.notasmultimedia.model.db.AttachmentType
 @Composable
 fun EditScreen(
     nav: NavController,
@@ -84,6 +86,16 @@ fun EditScreen(
             vm.onMediaSelected(uri, mimeType)
         }
     }
+    val pickFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val mime = ctx.contentResolver.getType(uri) ?: "application/octet-stream"
+            vm.onMediaSelected(uri, mime)
+        }
+    }
+
+    val pickAudioLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) vm.onMediaSelected(uri, "audio/mpeg") // El VM detectará el mime real o usará este como pista
+    }
 
     // --- Diálogos ---
 
@@ -108,6 +120,16 @@ fun EditScreen(
                         vm.showMediaPicker(false)
                         pickVisualMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
                     }) { Text("Elegir de la galería") }
+                    TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                        vm.showMediaPicker(false)
+                        pickAudioLauncher.launch("audio/*") // Filtra solo audios
+                    }) { Text("Audio") }
+
+                    TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                        vm.showMediaPicker(false)
+                        // application/* incluye pdf, doc, json, etc.
+                        pickFileLauncher.launch(arrayOf("application/*", "text/*"))
+                    }) { Text("Archivo (PDF, Doc...)") }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         TextButton(onClick = { vm.showMediaPicker(false) }) { Text("Cancelar") }
                     }
@@ -196,9 +218,7 @@ fun EditScreen(
 
             Text("Adjuntos", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ElevatedButton(onClick = { vm.showMediaPicker(true) }) { Text("+ Foto/Video") }
-                ElevatedButton(onClick = { /* TODO */ }) { Text("+ Archivo") }
-                ElevatedButton(onClick = { /* TODO */ }) { Text("+ Audio") }
+                ElevatedButton(onClick = { vm.showMediaPicker(true) }) { Text("+ Multimedia/archivos") }
             }
 
             Attachments(
@@ -225,29 +245,47 @@ private fun Attachments(
             modifier = modifier.padding(vertical = 16.dp)
         )
     } else {
-        LazyRow(
-            modifier = modifier,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        LazyRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(attachments) { attachment ->
                 Box(contentAlignment = Alignment.TopEnd) {
-                    AsyncImage(
-                        model = attachment.uri,
-                        contentDescription = attachment.description,
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clickable {
-                                try {
-                                    val encodedUri = URLEncoder.encode(attachment.uri, StandardCharsets.UTF_8.toString())
-                                    // NOTA: En modo Tablet (Dialog), esta ruta debe existir en el NavHost temporal
-                                    // o esta llamada lanzará excepción. Si falla, catch para evitar crash.
-                                    nav.navigate("${Routes.MEDIA_VIEWER}/$encodedUri")
-                                } catch (e: Exception) {
-                                    // Fallback por seguridad
-                                    e.printStackTrace()
-                                }
+
+                    // --- LÓGICA VISUAL MEJORADA ---
+                    if (attachment.type == AttachmentType.IMAGE || attachment.type == AttachmentType.VIDEO) {
+                        // Muestra miniatura (lo que ya tenías)
+                        AsyncImage(
+                            model = attachment.uri,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(96.dp)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { /* Navegar al visor */ }
+                        )
+                    } else {
+                        // Muestra ICONO para Audio/Archivo
+                        Column(
+                            modifier = Modifier
+                                .size(96.dp)
+                                .background(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.shapes.small)
+                                .clickable { /* Navegar al visor */ },
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = if (attachment.type == AttachmentType.AUDIO) Icons.Default.AudioFile else Icons.Default.InsertDriveFile,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            // Muestra el nombre del archivo si existe
+                            if (!attachment.description.isNullOrBlank()) {
+                                Text(
+                                    text = attachment.description,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                )
                             }
-                    )
+                        }
+                    }
                     IconButton(
                         onClick = { onRemove(attachment) },
                         modifier = Modifier.size(24.dp)

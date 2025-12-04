@@ -20,7 +20,7 @@ import com.tuorg.notasmultimedia.model.db.ReminderEntity
 import com.tuorg.notasmultimedia.ui.common.AlarmScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
+import android.provider.OpenableColumns
 data class EditUiState(
     val id: String,
     val isNewNote: Boolean = true,
@@ -83,7 +83,7 @@ class NoteEditViewModel(
     fun showMediaPicker(show: Boolean) { _state.value = _state.value.copy(showMediaPicker = show) }
 
     fun onMediaSelected(uri: Uri, mimeType: String?) {
-        viewModelScope.launch(Dispatchers.IO) { // <--- CAMBIO: Ejecutar en hilo de IO
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 // Esto es una operación de disco/base de datos, debe ir en IO
                 contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -94,14 +94,19 @@ class NoteEditViewModel(
             val attachmentType = when {
                 mimeType?.startsWith("image") == true -> AttachmentType.IMAGE
                 mimeType?.startsWith("video") == true -> AttachmentType.VIDEO
-                else -> return@launch
+                mimeType?.startsWith("audio") == true -> AttachmentType.AUDIO
+                else -> AttachmentType.FILE
             }
 
+            var fileName: String? = null
+            if (attachmentType == AttachmentType.FILE || attachmentType == AttachmentType.AUDIO) {
+                fileName = getFileNameFromUri(contentResolver, uri)
+            }
             val newAttachment = AttachmentEntity(
                 noteId = stableNoteId,
                 type = attachmentType,
                 uri = uri.toString(),
-                description = null
+                description = fileName
             )
 
             // Actualizamos el estado en el hilo principal
@@ -112,6 +117,19 @@ class NoteEditViewModel(
                 )
             }
         }
+    }
+    private fun getFileNameFromUri(resolver: android.content.ContentResolver, uri: Uri): String? {
+        var name: String? = null
+        val cursor = resolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val index = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index != -1) {
+                    name = it.getString(index)
+                }
+            }
+        }
+        return name
     }
 
     fun save(onSaved: () -> Unit) {

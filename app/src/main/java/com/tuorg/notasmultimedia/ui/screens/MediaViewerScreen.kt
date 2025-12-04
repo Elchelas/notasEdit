@@ -10,8 +10,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,6 +78,50 @@ fun MediaViewerScreen(uri: String, onBackPressed: () -> Unit) {
             }
         }
 
+        when {
+            // Aceptamos video O audio
+            mimeType?.startsWith("video/") == true || mimeType?.startsWith("audio/") == true -> {
+                val exoPlayer = remember {
+                    ExoPlayer.Builder(context).build().apply {
+                        setMediaItem(MediaItem.fromUri(decodedUri))
+                        prepare()
+                        playWhenReady = true
+                    }
+                }
+
+                // PlayerView maneja controles de audio automáticamente (muestra barra de progreso)
+                AndroidView(
+                    factory = {
+                        PlayerView(it).apply {
+                            player = exoPlayer
+                            // Si es audio, podemos ocultar el "shutter" negro o personalizarlo
+                            controllerShowTimeoutMs = 0 // Mantener controles visibles para audio
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+                // ... (DisposableEffect igual)
+            }
+            mimeType?.startsWith("image/") == true -> {
+                // ... (Igual que antes)
+            }
+            else -> {
+                // Caso PDF/Archivo: No tenemos visor interno, intentamos abrir app externa
+                LaunchedEffect(Unit) {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        setDataAndType(decodedUri, mimeType)
+                        flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    }
+                    try {
+                        context.startActivity(intent)
+                        onBackPressed() // Cerramos el visor negro porque abrimos app externa
+                    } catch (e: Exception) {
+                        // Si no hay app para abrirlo, mostrar error o quedarse
+                    }
+                }
+                Text("Abriendo archivo externo...", color = Color.White)
+            }
+        }
         // Botón para volver atrás
         IconButton(
             onClick = onBackPressed,
