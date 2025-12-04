@@ -15,9 +15,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -44,7 +47,10 @@ import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
-
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material3.CardDefaults
 @Composable
 fun EditScreen(
     navController: NavController,
@@ -184,6 +190,86 @@ fun EditScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 FilterChip(selected = ui.type == ItemType.TASK, onClick = { viewModel.setType(ItemType.TASK) }, label = { Text("Tarea") })
                 FilterChip(selected = ui.type == ItemType.NOTE, onClick = { viewModel.setType(ItemType.NOTE) }, label = { Text("Nota") })
+            }
+
+            if (ui.type == ItemType.TASK && ui.dueAt != null) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        // Título del panel
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.NotificationsActive,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Avisos previos", style = MaterialTheme.typography.titleSmall)
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        // Inputs numéricos (Cantidad e Intervalo)
+                        // Usamos 'remember' para guardar lo que escribes mientras la pantalla está activa
+                        var countText by remember { mutableStateOf("3") }
+                        var intervalText by remember { mutableStateOf("10") }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Campo: Cuántas alertas
+                            OutlinedTextField(
+                                value = countText,
+                                onValueChange = { if (it.all { c -> c.isDigit() }) countText = it },
+                                label = { Text("Cant.") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+
+                            // Campo: Cada cuántos minutos
+                            OutlinedTextField(
+                                value = intervalText,
+                                onValueChange = { if (it.all { c -> c.isDigit() }) intervalText = it },
+                                label = { Text("Minutos") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                        }
+
+                        // Botón para ejecutar la lógica del ViewModel
+                        Button(
+                            onClick = {
+                                val c = countText.toIntOrNull() ?: 0
+                                val m = intervalText.toIntOrNull() ?: 0
+                                if (c > 0 && m > 0) {
+                                    // AQUÍ LLAMAMOS A LA FUNCIÓN QUE ACABAMOS DE ARREGLAR
+                                    viewModel.generatePreDeadlineReminders(c, m)
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        ) {
+                            Text("Generar Alertas")
+                        }
+
+                        // Feedback visual: Muestra cuántas alertas se crearon
+                        if (ui.reminders.isNotEmpty()) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "✅ ${ui.reminders.size} alertas programadas antes de la fecha.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
             }
 
             if (ui.type == ItemType.TASK) {

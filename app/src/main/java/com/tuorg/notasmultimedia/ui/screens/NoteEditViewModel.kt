@@ -40,9 +40,9 @@ data class EditUiState(
     val dueAt: LocalDateTime? = null,
     val completed: Boolean = false,
     val attachments: List<AttachmentEntity> = emptyList(),
+    val reminders: List<ReminderEntity> = emptyList(),
     val showMediaPicker: Boolean = false,
     val recurringInterval: Long = 0,
-    // New state for camera actions
     val captureMediaAction: CaptureMediaAction? = null,
     val tempFileUri: Uri? = null
 )
@@ -78,6 +78,7 @@ class NoteEditViewModel(
                         dueAt = n.dueAt,
                         completed = n.completed,
                         attachments = nwr.attachments,
+                        reminders = nwr.reminders
                     )
                 }
             }
@@ -94,6 +95,7 @@ class NoteEditViewModel(
     fun showMediaPicker(show: Boolean) { _state.value = _state.value.copy(showMediaPicker = show) }
 
     // --- Start of New/Modified Media Logic ---
+
 
     fun prepareToCaptureMedia(action: CaptureMediaAction) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -200,14 +202,47 @@ class NoteEditViewModel(
         return name
     }
 
-    fun save(onSaved: () -> Unit) {
+    /**
+     * Genera N recordatorios hacia atrás desde la fecha límite.
+     * @param count Cantidad de avisos (ej. 3 avisos).
+     * @param intervalMinutes Minutos entre cada aviso (ej. 15 min).
+     */
+    fun generatePreDeadlineReminders(count: Int, intervalMinutes: Int) {
+        val deadline = _state.value.dueAt ?: return
 
+        val newReminders = mutableListOf<ReminderEntity>()
+
+        val zoneId = java.time.ZoneId.systemDefault()
+        val deadlineMillis = deadline.atZone(zoneId).toInstant().toEpochMilli()
+        val oneMinuteMillis = 60 * 1000
+
+        for (i in 1..count) {
+            // Calculamos el tiempo hacia atrás: Deadline - (i * intervalo)
+            val timeOffset = i * intervalMinutes * oneMinuteMillis
+            val triggerTime = deadlineMillis - timeOffset
+
+            // Solo agregamos si el aviso es en el futuro (para no sonar de golpe si ya pasó)
+            if (triggerTime > System.currentTimeMillis()) {
+                newReminders.add(
+                    ReminderEntity(
+                        noteId = stableNoteId,
+                        triggerAt = triggerTime,
+                        isRecurring = false,
+                        intervalMinutes = 0
+                    )
+                )
+            }
+        }
+
+        // Actualizamos el estado reemplazando los recordatorios anteriores
+        _state.value = _state.value.copy(reminders = newReminders)
+    }
+    fun save(onSaved: () -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             val s = _state.value
             val now = LocalDateTime.now()
-            val id = s.id // Ya no es nullable gracias a tu lógica
+            val id = s.id
 
-            // ... (creación de NoteEntity igual que antes) ...
             val entity = NoteEntity(
                 id = id,
                 title = s.title.trim(),
@@ -222,9 +257,13 @@ class NoteEditViewModel(
                 completed = if (s.type == ItemType.TASK) s.completed else false
             )
 
-            // ... (lógica de reminders igual que antes) ...
-            val triggerMillis = s.dueAt?.atZone(java.time.ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
-            val reminders = if (s.type == ItemType.TASK && triggerMillis != null) {
+            // 1. Decidir qué recordatorios guardar
+            val finalReminders = if (s.reminders.isNotEmpty()) {
+                // Si el usuario generó avisos múltiples, usamos esos
+                s.reminders
+            } else if (s.type == ItemType.TASK && s.dueAt != null) {
+                // Si no, creamos uno básico para la fecha límite
+                val triggerMillis = s.dueAt.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
                 listOf(ReminderEntity(
                     noteId = id,
                     triggerAt = triggerMillis,
@@ -235,23 +274,25 @@ class NoteEditViewModel(
                 emptyList()
             }
 
-            // 4. Guardar (Ahora es seguro porque estamos en IO)
-            repo.upsertGraph(note = entity, attachments = s.attachments, reminders = reminders)
+            // 2. Guardar en BD
+            repo.upsertGraph(note = entity, attachments = s.attachments, reminders = finalReminders)
 
+            // 3. Obtener los datos reales (con IDs generados)
             val savedData = repo.byId(id).firstOrNull()
             val realReminders = savedData?.reminders ?: emptyList()
 
-            // 5. Programar Alarmas
+            // 4. Programar TODAS las alarmas en Android
             if (realReminders.isNotEmpty()) {
                 try {
                     val scheduler = AlarmScheduler(Graph.appContext)
-                    scheduler.schedule(realReminders.first(), entity.title)
+                    realReminders.forEach { reminder ->
+                        scheduler.schedule(reminder, entity.title)
+                    }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
 
-            // 6. Volver al hilo principal para navegar
             withContext(Dispatchers.Main) {
                 onSaved()
             }
@@ -260,6 +301,7 @@ class NoteEditViewModel(
     fun onAttachmentRemoved(attachment: AttachmentEntity) {
         _state.value = _state.value.copy(attachments = _state.value.attachments.filterNot { it.uri == attachment.uri })
     }
+
 
     companion object {
         fun provideFactory(noteId: String?): ViewModelProvider.Factory =
@@ -270,4 +312,5 @@ class NoteEditViewModel(
                 }
             }
     }
+
 }
