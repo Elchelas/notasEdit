@@ -35,13 +35,15 @@ fun DetailScreen(
 @Composable
 fun DetailScreenStandalone(
     id: String,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
     vm: NoteDetailViewModel = viewModel(factory = NoteDetailViewModel.provideFactory(id))
 ) {
     DetailScaffold(
         id = id,
         vm = vm,
-        onEdit = { /* TODO: abrir editor en panel derecho si lo deseas */ },
-        onDeleted = { /* TODO: limpiar selección desde Home si lo deseas */ }
+        onEdit = onEdit,
+        onDeleted = onDelete
     )
 }
 

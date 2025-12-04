@@ -48,6 +48,7 @@ import com.tuorg.notasmultimedia.ui.theme.AppTheme
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.saveable.rememberSaveable
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -125,9 +126,10 @@ fun App() {
         }
 
         // --- FLUJO TABLET ---
-        var selectedId by remember { mutableStateOf<String?>(null) }
-        var showSettings by remember { mutableStateOf(false) }
-        var showEditor by remember { mutableStateOf(false) }
+        var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+        var showSettings by rememberSaveable { mutableStateOf(false) }
+        var showEditor by rememberSaveable { mutableStateOf(false) }
+        var editingId by rememberSaveable { mutableStateOf<String?>(null) }
 
         TabletHome(
             drawerContent = {
@@ -138,6 +140,7 @@ fun App() {
                     },
                     onNew = {
                         showSettings = false
+                        editingId = null
                         showEditor = true
                     },
                     onSettings = {
@@ -155,6 +158,7 @@ fun App() {
                     },
                     onCreateNew = {
                         showSettings = false
+                        editingId = null
                         showEditor = true
                         onCreateNew()
                     },
@@ -164,13 +168,23 @@ fun App() {
             rightPane = {
                 when {
                     showSettings -> SettingsScreen { showSettings = false }
-                    selectedId != null -> DetailScreenStandalone(id = selectedId!!)
+                    selectedId != null -> DetailScreenStandalone(
+                        id = selectedId!!,
+                        onEdit = {
+                            // 3. LÓGICA BOTÓN EDITAR
+                            editingId = selectedId
+                            showEditor = true
+                        },
+                        onDelete = {
+                            selectedId = null
+                        }
+                    )
                     else -> TabletDetailPlaceholder()
                 }
             }
         )
 
-        // --- Editor
+        // --- Editor (Dialog)
         if (showEditor) {
             Dialog(
                 onDismissRequest = { showEditor = false },
@@ -180,7 +194,9 @@ fun App() {
                     Scaffold(
                         topBar = {
                             CenterAlignedTopAppBar(
-                                title = { Text("Nueva nota/tarea") },
+                                title = {
+                                    Text(if (editingId == null) "Nueva nota/tarea" else "Editar nota")
+                                },
                                 navigationIcon = {
                                     IconButton(onClick = { showEditor = false }) {
                                         Text("Cerrar")
@@ -195,7 +211,8 @@ fun App() {
 
                             NavHost(navController = dialogNav, startDestination = "edit") {
                                 composable("edit") {
-                                    EditScreen(nav = dialogNav, noteId = null)
+                                    // 4. Pasamos el editingId correcto al EditScreen
+                                    EditScreen(nav = dialogNav, noteId = editingId)
                                 }
                                 composable("done") {
                                 }
