@@ -46,7 +46,11 @@ data class EditUiState(
     val captureMediaAction: CaptureMediaAction? = null,
     val tempFileUri: Uri? = null
 )
-
+enum class TimeUnit(val label: String, val minutes: Long) {
+    MINUTES("Min", 1),
+    HOURS("Horas", 60),
+    DAYS("Días", 1440) // 24 * 60
+}
 class NoteEditViewModel(
     noteId: String?,
 ) : ViewModel() {
@@ -96,6 +100,46 @@ class NoteEditViewModel(
 
     // --- Start of New/Modified Media Logic ---
 
+    /**
+     * Genera N recordatorios hacia atrás.
+     * @param count Cantidad de avisos.
+     * @param interval Valor del intervalo (ej. 2).
+     * @param unit Unidad de tiempo (Minutos, Horas, Días).
+     */
+    fun generatePreDeadlineReminders(count: Int, interval: Int, unit: TimeUnit) {
+        val deadline = _state.value.dueAt ?: return
+
+        val newReminders = mutableListOf<ReminderEntity>()
+        val zoneId = java.time.ZoneId.systemDefault()
+        val deadlineMillis = deadline.atZone(zoneId).toInstant().toEpochMilli()
+
+        // Un minuto en milisegundos
+        val oneMinuteMillis = 60 * 1000L
+
+        for (i in 1..count) {
+            val minutesOffset = i * interval * unit.minutes
+            val totalMillisOffset = minutesOffset * oneMinuteMillis
+
+            val triggerTime = deadlineMillis - totalMillisOffset
+
+            // Solo agregamos si es futuro
+            if (triggerTime > System.currentTimeMillis()) {
+                newReminders.add(
+                    ReminderEntity(
+                        noteId = stableNoteId,
+                        triggerAt = triggerTime,
+                        isRecurring = false,
+                        intervalMinutes = 0
+                    )
+                )
+            }
+        }
+
+        // Ordenamos para que queden cronológicos
+        val sortedReminders = newReminders.sortedBy { it.triggerAt }
+
+        _state.value = _state.value.copy(reminders = sortedReminders)
+    }
 
     fun prepareToCaptureMedia(action: CaptureMediaAction) {
         viewModelScope.launch(Dispatchers.IO) {

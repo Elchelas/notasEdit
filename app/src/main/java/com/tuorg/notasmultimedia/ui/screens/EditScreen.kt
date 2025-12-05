@@ -51,6 +51,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.ArrowDropDown
 @Composable
 fun EditScreen(
     navController: NavController,
@@ -194,34 +195,30 @@ fun EditScreen(
 
             if (ui.type == ItemType.TASK && ui.dueAt != null) {
                 Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f)),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                 ) {
                     Column(Modifier.padding(12.dp)) {
-                        // Título del panel
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                            Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(8.dp))
                             Text("Avisos previos", style = MaterialTheme.typography.titleSmall)
                         }
 
                         Spacer(Modifier.height(8.dp))
 
-                        // Inputs numéricos (Cantidad e Intervalo)
-                        // Usamos 'remember' para guardar lo que escribes mientras la pantalla está activa
                         var countText by remember { mutableStateOf("3") }
-                        var intervalText by remember { mutableStateOf("10") }
+                        var intervalText by remember { mutableStateOf("1") }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Campo: Cuántas alertas
+                        // Estado para el Dropdown
+                        var expandedUnit by remember { mutableStateOf(false) }
+                        var selectedUnit by remember { mutableStateOf(TimeUnit.HOURS) }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 1. Cantidad
                             OutlinedTextField(
                                 value = countText,
                                 onValueChange = { if (it.all { c -> c.isDigit() }) countText = it },
@@ -231,39 +228,60 @@ fun EditScreen(
                                 singleLine = true
                             )
 
-                            // Campo: Cada cuántos minutos
+                            Text("cada", style = MaterialTheme.typography.bodySmall)
+
+                            // 2. Intervalo
                             OutlinedTextField(
                                 value = intervalText,
                                 onValueChange = { if (it.all { c -> c.isDigit() }) intervalText = it },
-                                label = { Text("Minutos") },
+                                label = { Text("Valor") }, // ej. 2
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
+
+                            // 3. Selector de Unidad (Dropdown)
+                            Box {
+                                OutlinedButton(onClick = { expandedUnit = true }) {
+                                    Text(selectedUnit.label)
+                                    Icon(Icons.Default.ArrowDropDown, null)
+                                }
+                                DropdownMenu(
+                                    expanded = expandedUnit,
+                                    onDismissRequest = { expandedUnit = false }
+                                ) {
+                                    TimeUnit.values().forEach { unit ->
+                                        DropdownMenuItem(
+                                            text = { Text(unit.label) },
+                                            onClick = {
+                                                selectedUnit = unit
+                                                expandedUnit = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
 
-                        // Botón para ejecutar la lógica del ViewModel
                         Button(
                             onClick = {
                                 val c = countText.toIntOrNull() ?: 0
-                                val m = intervalText.toIntOrNull() ?: 0
-                                if (c > 0 && m > 0) {
-                                    // AQUÍ LLAMAMOS A LA FUNCIÓN QUE ACABAMOS DE ARREGLAR
-                                    viewModel.generatePreDeadlineReminders(c, m)
+                                val i = intervalText.toIntOrNull() ?: 0
+                                if (c > 0 && i > 0) {
+                                    // Llamamos a la nueva función con la UNIDAD
+                                    viewModel.generatePreDeadlineReminders(c, i, selectedUnit)
                                 }
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp)
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                         ) {
                             Text("Generar Alertas")
                         }
 
-                        // Feedback visual: Muestra cuántas alertas se crearon
                         if (ui.reminders.isNotEmpty()) {
                             Spacer(Modifier.height(4.dp))
+                            // Mostramos un resumen más útil
                             Text(
-                                text = "✅ ${ui.reminders.size} alertas programadas antes de la fecha.",
+                                text = "✅ ${ui.reminders.size} alertas programadas.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
