@@ -24,7 +24,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDateTime
 import java.util.UUID
-
+import android.media.MediaRecorder
+import android.os.Build
 enum class CaptureMediaAction {
     PHOTO, VIDEO
 }
@@ -42,6 +43,7 @@ data class EditUiState(
     val attachments: List<AttachmentEntity> = emptyList(),
     val reminders: List<ReminderEntity> = emptyList(),
     val showMediaPicker: Boolean = false,
+    val isRecording: Boolean = false,
     val recurringInterval: Long = 0,
     val captureMediaAction: CaptureMediaAction? = null,
     val tempFileUri: Uri? = null
@@ -57,12 +59,12 @@ class NoteEditViewModel(
 
     private val repo = Graph.notes
     private val contentResolver = Graph.contentResolver
-
-
     private val stableNoteId = noteId ?: UUID.randomUUID().toString()
-
     private val _state = MutableStateFlow(EditUiState(id = stableNoteId, isNewNote = noteId == null))
+
+    private var mediaRecorder: MediaRecorder? = null
     val state = _state.asStateFlow()
+
     fun setRecurring(minutes: Long) { _state.value = _state.value.copy(recurringInterval = minutes) }
     init {
         // Si el noteId NO es nulo, significa que estamos editando una nota existente.
@@ -153,7 +155,7 @@ class NoteEditViewModel(
             // Get a content URI for the file using our FileProvider
             val uri = FileProvider.getUriForFile(
                 context,
-                "${BuildConfig.APPLICATION_ID}.provider", // Authority must match AndroidManifest
+                "${BuildConfig.APPLICATION_ID}.provider",
                 file
             )
 
@@ -165,6 +167,77 @@ class NoteEditViewModel(
                 )
             }
         }
+    }
+
+    fun startRecording() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = Graph.appContext
+            // Crear archivo temporal .mp3 o .m4a
+            val file = File.createTempFile("audio_rec_", ".mp3", context.externalCacheDir)
+            val uri = FileProvider.getUriForFile(context, "${BuildConfig.APPLICATION_ID}.provider", file)
+
+            withContext(Dispatchers.Main) {
+                try {
+                    // Inicializar Recorder según versión de Android
+                    mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        MediaRecorder(context)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        MediaRecorder()
+                    }.apply {
+                        setAudioSource(MediaRecorder.AudioSource.MIC)
+                        setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                        setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                        setOutputFile(file.absolutePath)
+                        prepare()
+                        start()
+                    }
+
+                    // Actualizar estado para mostrar UI de "Grabando..."
+                    _state.value = _state.value.copy(
+                        isRecording = true,
+                        tempFileUri = uri
+                    )
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    _state.value = _state.value.copy(isRecording = false)
+                }
+            }
+        }
+    }
+
+    fun stopRecording() {
+        try {
+            mediaRecorder?.stop()
+            mediaRecorder?.release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        mediaRecorder = null
+
+        // Guardar el adjunto
+        val uri = _state.value.tempFileUri
+        if (uri != null) {
+            onMediaSelected(uri, "audio/mpeg")
+        }
+
+        // Restaurar estado
+        _state.value = _state.value.copy(isRecording = false, tempFileUri = null, showMediaPicker = false)
+    }
+
+    fun cancelRecording() {
+        try {
+            mediaRecorder?.stop()
+            mediaRecorder?.release()
+        } catch (e: Exception) { e.printStackTrace() }
+        mediaRecorder = null
+        _state.value = _state.value.copy(isRecording = false, tempFileUri = null)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        mediaRecorder?.release()
+        mediaRecorder = null
     }
 
     fun onMediaCaptured(success: Boolean) {

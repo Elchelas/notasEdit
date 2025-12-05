@@ -52,6 +52,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.filled.ArrowDropDown
+import android.Manifest
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
 @Composable
 fun EditScreen(
     navController: NavController,
@@ -61,7 +64,14 @@ fun EditScreen(
     val ui by viewModel.state.collectAsState()
     val ctx = LocalContext.current
 
-    // --- Screen is now "dumb" and only reacts to ViewModel state ---
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            if (isGranted) {
+                viewModel.startRecording()
+            }
+        }
+    )
 
     // Launcher for taking a picture
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -108,34 +118,76 @@ fun EditScreen(
     // --- Dialogs ---
 
     if (ui.showMediaPicker) {
-        Dialog(onDismissRequest = { viewModel.showMediaPicker(false) }) {
+        Dialog(onDismissRequest = {
+            if (ui.isRecording) viewModel.stopRecording() else viewModel.showMediaPicker(false)
+        }) {
             Surface(shape = MaterialTheme.shapes.large, tonalElevation = 8.dp) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Añadir multimedia", style = MaterialTheme.typography.titleLarge)
-                    // Buttons now just notify the ViewModel of the user's intent
-                    TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        viewModel.showMediaPicker(false)
-                        viewModel.prepareToCaptureMedia(CaptureMediaAction.PHOTO)
-                    }) { Text("Tomar foto") }
-                    TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        viewModel.showMediaPicker(false)
-                        viewModel.prepareToCaptureMedia(CaptureMediaAction.VIDEO)
-                    }) { Text("Grabar video") }
-                    TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        viewModel.showMediaPicker(false)
-                        pickVisualMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-                    }) { Text("Elegir de la galería") }
-                    TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        viewModel.showMediaPicker(false)
-                        pickAudioLauncher.launch("audio/*")
-                    }) { Text("Audio") }
 
-                    TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                        viewModel.showMediaPicker(false)
-                        pickFileLauncher.launch(arrayOf("application/*", "text/*"))
-                    }) { Text("Archivo (PDF, Doc...)") }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { viewModel.showMediaPicker(false) }) { Text("Cancelar") }
+                    // SI ESTÁ GRABANDO, MUESTRA UI DE GRABACIÓN
+                    if (ui.isRecording) {
+                        Text("Grabando audio...", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.error)
+
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(100.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            // Botón Gigante de STOP
+                            Button(
+                                onClick = { viewModel.stopRecording() },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                modifier = Modifier.size(80.dp),
+                                shape = CircleShape
+                            ) {
+                                Icon(Icons.Default.Stop, null, modifier = Modifier.size(40.dp))
+                            }
+                        }
+                        Text("Toque para finalizar", modifier = Modifier.align(Alignment.CenterHorizontally))
+                    }
+                    // SI NO, MUESTRA EL MENÚ NORMAL
+                    else {
+                        Text("Añadir multimedia", style = MaterialTheme.typography.titleLarge)
+
+                        TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                            viewModel.showMediaPicker(false)
+                            viewModel.prepareToCaptureMedia(CaptureMediaAction.PHOTO)
+                        }) { Text("Tomar foto") }
+
+                        TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                            viewModel.showMediaPicker(false)
+                            viewModel.prepareToCaptureMedia(CaptureMediaAction.VIDEO)
+                        }) { Text("Grabar video") }
+
+                        // --- BOTÓN DE GRABAR AUDIO (MODIFICADO) ---
+                        TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                            // Pedimos permiso. Si lo tiene, arranca startRecording()
+                            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Mic, null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Grabar audio (Nuevo)")
+                            }
+                        }
+
+                        TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                            viewModel.showMediaPicker(false)
+                            pickVisualMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        }) { Text("Elegir de la galería") }
+
+                        TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                            viewModel.showMediaPicker(false)
+                            pickAudioLauncher.launch("audio/*")
+                        }) { Text("Elegir audio existente") }
+
+                        TextButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                            viewModel.showMediaPicker(false)
+                            pickFileLauncher.launch(arrayOf("application/*", "text/*"))
+                        }) { Text("Archivo (PDF, Doc...)") }
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { viewModel.showMediaPicker(false) }) { Text("Cancelar") }
+                        }
                     }
                 }
             }
